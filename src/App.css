@@ -33,6 +33,33 @@
   color: #526663;
 }
 
+.auth-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 22px;
+  border: 1px solid #dce7e4;
+  border-radius: 8px;
+  padding: 4px;
+  background: #edf4f2;
+}
+
+.auth-switch button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 6px;
+  color: #314743;
+  background: transparent;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.auth-switch button.active {
+  color: #fff;
+  background: #176b87;
+}
+
 .login-form {
   display: grid;
   gap: 14px;
@@ -63,6 +90,12 @@
   outline: 3px solid rgba(23, 107, 135, 0.16);
 }
 
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .login-form button,
 .logout-button {
   min-height: 40px;
@@ -79,6 +112,16 @@
 .login-form button:disabled {
   cursor: wait;
   opacity: 0.7;
+}
+
+.success-banner {
+  margin-bottom: 4px;
+  border: 1px solid #a9d8bf;
+  border-radius: 8px;
+  padding: 14px 16px;
+  color: #176046;
+  background: #f0fbf5;
+  font-weight: 700;
 }
 
 .dashboard-page {
@@ -352,6 +395,10 @@ td {
   .header-actions {
     align-items: stretch;
     flex-wrap: wrap;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
   }
 
   .metric-grid,

@@ -80,9 +80,20 @@ function App() {
   const [authToken, setAuthToken] = useState(() => window.localStorage.getItem(TOKEN_KEY))
   const [user, setUser] = useState(null)
   const [checkingSession, setCheckingSession] = useState(Boolean(authToken))
+  const [authMode, setAuthMode] = useState('login')
   const [loginForm, setLoginForm] = useState({ username: '', password: '' })
   const [loginError, setLoginError] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
+  const [registerForm, setRegisterForm] = useState({
+    username: '',
+    password: '',
+    email: '',
+    first_name: '',
+    last_name: '',
+  })
+  const [registerError, setRegisterError] = useState('')
+  const [registerSuccess, setRegisterSuccess] = useState('')
+  const [registerLoading, setRegisterLoading] = useState(false)
   const [dashboard, setDashboard] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -196,6 +207,35 @@ function App() {
     }
   }
 
+  async function handleRegister(event) {
+    event.preventDefault()
+    setRegisterError('')
+    setRegisterSuccess('')
+    setRegisterLoading(true)
+
+    try {
+      const { data } = await api.post('/api/auth/register/', registerForm)
+      setRegisterSuccess(data.detail || 'Cuenta creada. Un administrador debe aprobar tu acceso.')
+      setRegisterForm({
+        username: '',
+        password: '',
+        email: '',
+        first_name: '',
+        last_name: '',
+      })
+      setLoginForm((current) => ({
+        ...current,
+        username: registerForm.username,
+        password: '',
+      }))
+      setAuthMode('login')
+    } catch (requestError) {
+      setRegisterError(requestError.response?.data?.detail || 'No fue posible crear la cuenta.')
+    } finally {
+      setRegisterLoading(false)
+    }
+  }
+
   async function handleLogout() {
     try {
       if (authToken) {
@@ -226,47 +266,161 @@ function App() {
   }
 
   if (!authToken || !user?.is_staff) {
+    const isLogin = authMode === 'login'
+
     return (
       <main className="auth-page">
         <section className="auth-panel">
           <p className="eyebrow">Acueducto veredal</p>
-          <h1>Ingreso administrativo</h1>
-          <p>Inicia sesion con una cuenta aprobada para ver el dashboard.</p>
+          <h1>{isLogin ? 'Ingreso administrativo' : 'Crear cuenta'}</h1>
+          <p>
+            {isLogin
+              ? 'Inicia sesion con una cuenta aprobada para ver el dashboard.'
+              : 'Solicita una cuenta. Un administrador debe aprobarla antes de entrar.'}
+          </p>
 
-          <form className="login-form" onSubmit={handleLogin}>
-            <label>
-              Usuario
-              <input
-                autoComplete="username"
-                name="username"
-                onChange={(event) => setLoginForm((current) => ({
-                  ...current,
-                  username: event.target.value,
-                }))}
-                required
-                type="text"
-                value={loginForm.username}
-              />
-            </label>
-            <label>
-              Contrasena
-              <input
-                autoComplete="current-password"
-                name="password"
-                onChange={(event) => setLoginForm((current) => ({
-                  ...current,
-                  password: event.target.value,
-                }))}
-                required
-                type="password"
-                value={loginForm.password}
-              />
-            </label>
-            {loginError && <div className="alert-banner">{loginError}</div>}
-            <button disabled={loginLoading} type="submit">
-              {loginLoading ? 'Ingresando...' : 'Ingresar'}
+          <div className="auth-switch" role="tablist" aria-label="Opciones de acceso">
+            <button
+              aria-selected={isLogin}
+              className={isLogin ? 'active' : ''}
+              onClick={() => {
+                setAuthMode('login')
+                setLoginError('')
+              }}
+              role="tab"
+              type="button"
+            >
+              Ingresar
             </button>
-          </form>
+            <button
+              aria-selected={!isLogin}
+              className={!isLogin ? 'active' : ''}
+              onClick={() => {
+                setAuthMode('register')
+                setRegisterError('')
+                setRegisterSuccess('')
+              }}
+              role="tab"
+              type="button"
+            >
+              Crear cuenta
+            </button>
+          </div>
+
+          {isLogin ? (
+            <form className="login-form" onSubmit={handleLogin}>
+              <label>
+                Usuario
+                <input
+                  autoComplete="username"
+                  name="username"
+                  onChange={(event) => setLoginForm((current) => ({
+                    ...current,
+                    username: event.target.value,
+                  }))}
+                  required
+                  type="text"
+                  value={loginForm.username}
+                />
+              </label>
+              <label>
+                Contrasena
+                <input
+                  autoComplete="current-password"
+                  name="password"
+                  onChange={(event) => setLoginForm((current) => ({
+                    ...current,
+                    password: event.target.value,
+                  }))}
+                  required
+                  type="password"
+                  value={loginForm.password}
+                />
+              </label>
+              {registerSuccess && <div className="success-banner">{registerSuccess}</div>}
+              {loginError && <div className="alert-banner">{loginError}</div>}
+              <button disabled={loginLoading} type="submit">
+                {loginLoading ? 'Ingresando...' : 'Ingresar'}
+              </button>
+            </form>
+          ) : (
+            <form className="login-form" onSubmit={handleRegister}>
+              <label>
+                Usuario
+                <input
+                  autoComplete="username"
+                  name="username"
+                  onChange={(event) => setRegisterForm((current) => ({
+                    ...current,
+                    username: event.target.value,
+                  }))}
+                  required
+                  type="text"
+                  value={registerForm.username}
+                />
+              </label>
+              <label>
+                Correo
+                <input
+                  autoComplete="email"
+                  name="email"
+                  onChange={(event) => setRegisterForm((current) => ({
+                    ...current,
+                    email: event.target.value,
+                  }))}
+                  type="email"
+                  value={registerForm.email}
+                />
+              </label>
+              <div className="form-row">
+                <label>
+                  Nombre
+                  <input
+                    autoComplete="given-name"
+                    name="first_name"
+                    onChange={(event) => setRegisterForm((current) => ({
+                      ...current,
+                      first_name: event.target.value,
+                    }))}
+                    type="text"
+                    value={registerForm.first_name}
+                  />
+                </label>
+                <label>
+                  Apellido
+                  <input
+                    autoComplete="family-name"
+                    name="last_name"
+                    onChange={(event) => setRegisterForm((current) => ({
+                      ...current,
+                      last_name: event.target.value,
+                    }))}
+                    type="text"
+                    value={registerForm.last_name}
+                  />
+                </label>
+              </div>
+              <label>
+                Contrasena
+                <input
+                  autoComplete="new-password"
+                  minLength="8"
+                  name="password"
+                  onChange={(event) => setRegisterForm((current) => ({
+                    ...current,
+                    password: event.target.value,
+                  }))}
+                  required
+                  type="password"
+                  value={registerForm.password}
+                />
+              </label>
+              {registerError && <div className="alert-banner">{registerError}</div>}
+              <button disabled={registerLoading} type="submit">
+                {registerLoading ? 'Creando...' : 'Crear cuenta'}
+              </button>
+            </form>
+          )}
         </section>
       </main>
     )
