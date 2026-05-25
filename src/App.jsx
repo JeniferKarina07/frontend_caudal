@@ -4,6 +4,7 @@ import './App.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const POLLING_MS = 3000
+const TOKEN_KEY = 'caudal_auth_token'
 
 const statusLabels = {
   seco: 'Seco',
@@ -76,23 +77,84 @@ function StatCard({ label, value, helper }) {
 }
 
 function App() {
+  const [authToken, setAuthToken] = useState(() => window.localStorage.getItem(TOKEN_KEY))
+  const [user, setUser] = useState(null)
+  const [checkingSession, setCheckingSession] = useState(Boolean(authToken))
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' })
+  const [loginError, setLoginError] = useState('')
+  const [loginLoading, setLoginLoading] = useState(false)
   const [dashboard, setDashboard] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
   const api = useMemo(() => axios.create({ baseURL: API_URL }), [])
+  const authHeaders = useMemo(
+    () => (authToken ? { Authorization: `Token ${authToken}` } : {}),
+    [authToken],
+  )
 
   useEffect(() => {
     let active = true
 
+    async function validateSession() {
+      if (!authToken) {
+        setCheckingSession(false)
+        setLoading(false)
+        return
+      }
+
+      try {
+        const { data } = await api.get('/api/auth/me/', { headers: authHeaders })
+        if (!active) return
+
+        if (!data.user?.is_staff) {
+          window.localStorage.removeItem(TOKEN_KEY)
+          setAuthToken('')
+          setUser(null)
+          setLoginError('Tu cuenta no tiene permisos de administrador.')
+          return
+        }
+
+        setUser(data.user)
+      } catch {
+        if (!active) return
+        window.localStorage.removeItem(TOKEN_KEY)
+        setAuthToken('')
+        setUser(null)
+      } finally {
+        if (active) setCheckingSession(false)
+      }
+    }
+
+    validateSession()
+
+    return () => {
+      active = false
+    }
+  }, [api, authHeaders, authToken])
+
+  useEffect(() => {
+    if (!authToken || !user?.is_staff) return undefined
+
+    let active = true
+
     async function loadDashboard() {
       try {
-        const { data } = await api.get('/api/v1/dashboard/')
+        const { data } = await api.get('/api/v1/dashboard/', { headers: authHeaders })
         if (!active) return
         setDashboard(data)
         setError('')
-      } catch {
+      } catch (requestError) {
         if (!active) return
+        if (requestError.response?.status === 401 || requestError.response?.status === 403) {
+          window.localStorage.removeItem(TOKEN_KEY)
+          setAuthToken('')
+          setUser(null)
+          setDashboard(null)
+          setError('')
+          setLoginError('Debes iniciar sesion con una cuenta de administrador.')
+          return
+        }
         setError('No fue posible conectar con la API Django.')
       } finally {
         if (active) setLoading(false)
@@ -106,7 +168,109 @@ function App() {
       active = false
       window.clearInterval(timer)
     }
-  }, [api])
+  }, [api, authHeaders, authToken, user])
+
+  async function handleLogin(event) {
+    event.preventDefault()
+    setLoginError('')
+    setLoginLoading(true)
+
+    try {
+      const { data } = await api.post('/api/auth/login/', loginForm)
+
+      if (!data.user?.is_staff) {
+        setLoginError('Tu cuenta no tiene permisos de administrador.')
+        return
+      }
+
+      window.localStorage.setItem(TOKEN_KEY, data.token)
+      setAuthToken(data.token)
+      setUser(data.user)
+      setLoginForm({ username: '', password: '' })
+      setDashboard(null)
+      setLoading(true)
+    } catch (requestError) {
+      setLoginError(requestError.response?.data?.detail || 'No fue posible iniciar sesion.')
+    } finally {
+      setLoginLoading(false)
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      if (authToken) {
+        await api.post('/api/auth/logout/', null, { headers: authHeaders })
+      }
+    } catch {
+      // La sesion local se cierra aunque el token ya no exista en el servidor.
+    } finally {
+      window.localStorage.removeItem(TOKEN_KEY)
+      setAuthToken('')
+      setUser(null)
+      setDashboard(null)
+      setError('')
+      setLoading(false)
+    }
+  }
+
+  if (checkingSession) {
+    return (
+      <main className="auth-page">
+        <section className="auth-panel">
+          <p className="eyebrow">Acueducto veredal</p>
+          <h1>Validando acceso</h1>
+          <p>Estamos comprobando tu sesion.</p>
+        </section>
+      </main>
+    )
+  }
+
+  if (!authToken || !user?.is_staff) {
+    return (
+      <main className="auth-page">
+        <section className="auth-panel">
+          <p className="eyebrow">Acueducto veredal</p>
+          <h1>Ingreso administrativo</h1>
+          <p>Inicia sesion con una cuenta aprobada para ver el dashboard.</p>
+
+          <form className="login-form" onSubmit={handleLogin}>
+            <label>
+              Usuario
+              <input
+                autoComplete="username"
+                name="username"
+                onChange={(event) => setLoginForm((current) => ({
+                  ...current,
+                  username: event.target.value,
+                }))}
+                required
+                type="text"
+                value={loginForm.username}
+              />
+            </label>
+            <label>
+              Contrasena
+              <input
+                autoComplete="current-password"
+                name="password"
+                onChange={(event) => setLoginForm((current) => ({
+                  ...current,
+                  password: event.target.value,
+                }))}
+                required
+                type="password"
+                value={loginForm.password}
+              />
+            </label>
+            {loginError && <div className="alert-banner">{loginError}</div>}
+            <button disabled={loginLoading} type="submit">
+              {loginLoading ? 'Ingresando...' : 'Ingresar'}
+            </button>
+          </form>
+        </section>
+      </main>
+    )
+  }
 
   const latest = dashboard?.latest?.reading
   const estado = dashboard?.latest?.estado || 'desconectado'
@@ -125,9 +289,14 @@ function App() {
           <h1>Monitoreo hidrico IoT</h1>
           <p>Sensor de flujo conectado a ESP32 con envio HTTP cada 3 segundos.</p>
         </div>
-        <div className={`status-pill status-${estado}`}>
-          <span />
-          {statusLabels[estado] || estado}
+        <div className="header-actions">
+          <div className={`status-pill status-${estado}`}>
+            <span />
+            {statusLabels[estado] || estado}
+          </div>
+          <button className="logout-button" onClick={handleLogout} type="button">
+            Salir
+          </button>
         </div>
       </header>
 
